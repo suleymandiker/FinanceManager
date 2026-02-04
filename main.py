@@ -70,6 +70,7 @@ if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
         data={"chat_id": TELEGRAM_CHAT_ID, "text": msg}
     )
 
+    print("Telegram status:", response.status_code)
     print("Telegram response:", response.status_code, response.text)
     print("TOKEN:", bool(TELEGRAM_TOKEN))
     print("CHAT_ID:", bool(TELEGRAM_CHAT_ID))
