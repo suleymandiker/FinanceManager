@@ -1,13 +1,26 @@
 # main.py
 from data_sources.markets import fetch_markets,fetch_us_stocks
-import schedule
-import time
+from datetime import datetime
+import pandas as pd
+import os
 
-def daily_job():
-    print("Markets:")
-    print(fetch_markets())
-    print("US Stocks:")
-    print(fetch_us_stocks())
+OUTPUT_DIR = "output"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+today = datetime.utcnow().strftime("%Y-%m-%d")
 
-daily_job()
+markets = fetch_markets()
+stocks = fetch_us_stocks()
+
+markets["Type"] = "Market"
+stocks["Type"] = "Stock"
+
+df = pd.concat([markets, stocks])
+df["Date"] = today
+
+file_path = f"{OUTPUT_DIR}/finance_{today}.csv"
+df.to_csv(file_path)
+
+print(f"Saved: {file_path}")
+print(df)
+
