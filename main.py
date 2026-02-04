@@ -1,12 +1,23 @@
 from dotenv import load_dotenv
-from data_sources.markets import fetch_markets, fetch_us_stocks
+from data_sources.markets import fetch_all_markets
 from datetime import datetime, timedelta
 import pandas as pd
 import os
 import glob
 import requests
 
+# ======================================================
+# ENV
+# ======================================================
+
 load_dotenv()
+
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+# ======================================================
+# PATHS & DATES
+# ======================================================
 
 OUTPUT_DIR = "output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -17,63 +28,84 @@ yesterday = today - timedelta(days=1)
 today_str = today.strftime("%Y-%m-%d")
 yesterday_str = yesterday.strftime("%Y-%m-%d")
 
-# 1️⃣ Bugünkü veriyi al
-markets = fetch_markets()
-stocks = fetch_us_stocks()
+today_file = f"{OUTPUT_DIR}/finance_{today_str}.csv"
 
-markets["Type"] = "Market"
-stocks["Type"] = "Stock"
+# ======================================================
+# 1️⃣ FETCH TODAY DATA (LONG FORMAT)
+# ======================================================
 
-df_today = pd.concat([markets, stocks])
+df_today = fetch_all_markets()
 df_today["Date"] = today_str
 
-today_file = f"{OUTPUT_DIR}/finance_{today_str}.csv"
-df_today.to_csv(today_file)
+df_today.to_csv(today_file, index=False)
 
-# 2️⃣ Dünkü dosyayı bul
-files = glob.glob(f"{OUTPUT_DIR}/finance_*.csv")
-files.sort()
+# ======================================================
+# 2️⃣ LOAD YESTERDAY (IF EXISTS)
+# ======================================================
 
+files = sorted(glob.glob(f"{OUTPUT_DIR}/finance_*.csv"))
 df_diff = None
-if len(files) >= 2:
-    df_yesterday = pd.read_csv(files[-2], index_col=0)
-    df_today = pd.read_csv(files[-1], index_col=0)
 
-    df_diff = df_today.copy()
-    df_diff["PrevClose"] = df_yesterday["Close"]
+if len(files) >= 2:
+    df_yesterday = pd.read_csv(files[-2])
+    df_today = pd.read_csv(files[-1])
+
+    df_diff = df_today.merge(
+        df_yesterday[["Group", "Asset", "Close"]],
+        on=["Group", "Asset"],
+        how="left",
+        suffixes=("", "_Prev")
+    )
+
     df_diff["Change_%"] = (
-        (df_today["Close"] - df_yesterday["Close"]) / df_yesterday["Close"] * 100
+        (df_diff["Close"] - df_diff["Close_Prev"])
+        / df_diff["Close_Prev"] * 100
     ).round(2)
 
-# 3️⃣ Telegram mesajı
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+# ======================================================
+# 3️⃣ TELEGRAM MESSAGE
+# ======================================================
 
 if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
 
-    if df_diff is None:
-        msg = f"📊 Finance Report ({today_str})\n\n"
-        msg += "İlk veri toplandı. Yarın değişim raporu gönderilecek.\n\n"
+    msg = f"📊 Finance Report ({today_str})\n\n"
 
-        for idx, row in df_today.iterrows():
-            msg += f"• {idx}: {row['Close']}\n"
+    if df_diff is None:
+        msg += "İlk veri toplandı. Yarın değişim raporu gönderilecek.\n\n"
+        sample = df_today.head(10)
+
+        for _, row in sample.iterrows():
+            msg += f"• {row['Asset']}: {row['Close']}\n"
 
     else:
-        msg = f"📊 Finance Report ({today_str})\n\n"
-        for idx, row in df_diff.iterrows():
-            change = row["Change_%"]
-            emoji = "🟢" if change >= 0 else "🔴"
-            msg += f"{emoji} {idx}: {change}%\n"
+        # Sadece anlamlı olanları gönderelim
+        df_show = df_diff.dropna(subset=["Change_%"]).sort_values(
+            "Change_%", ascending=False
+        )
 
-    response = requests.post(
+        top_up = df_show.head(5)
+        top_down = df_show.tail(5)
+
+        msg += "🟢 En Çok Yükselenler:\n"
+        for _, row in top_up.iterrows():
+            msg += f"{row['Asset']}: {row['Change_%']}%\n"
+
+        msg += "\n🔴 En Çok Düşenler:\n"
+        for _, row in top_down.iterrows():
+            msg += f"{row['Asset']}: {row['Change_%']}%\n"
+
+    resp = requests.post(
         f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-        data={"chat_id": TELEGRAM_CHAT_ID, "text": msg}
+        data={
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": msg
+        }
     )
 
-    print("Telegram status:", response.status_code)
-    print("Telegram response:", response.status_code, response.text)
-    print("TOKEN:", bool(TELEGRAM_TOKEN))
-    print("CHAT_ID:", bool(TELEGRAM_CHAT_ID))
-    print("CSV SAYISI:", len(files))
+    print("Telegram status:", resp.status_code)
+    print("Telegram response:", resp.text)
 
+else:
+    print("Telegram env vars missing, skipping notification")
 
+print("DONE")
