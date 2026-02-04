@@ -49,17 +49,30 @@ if len(files) >= 2:
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID and df_diff is not None:
-    msg = f"📊 Finance Report ({today_str})\n\n"
-    for idx, row in df_diff.iterrows():
-        change = row["Change_%"]
-        emoji = "🟢" if change >= 0 else "🔴"
-        msg += f"{emoji} {idx}: {change}%\n"
+if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
 
-    requests.post(
+    if df_diff is None:
+        msg = f"📊 Finance Report ({today_str})\n\n"
+        msg += "İlk veri toplandı. Yarın değişim raporu gönderilecek.\n\n"
+
+        for idx, row in df_today.iterrows():
+            msg += f"• {idx}: {row['Close']}\n"
+
+    else:
+        msg = f"📊 Finance Report ({today_str})\n\n"
+        for idx, row in df_diff.iterrows():
+            change = row["Change_%"]
+            emoji = "🟢" if change >= 0 else "🔴"
+            msg += f"{emoji} {idx}: {change}%\n"
+
+    response = requests.post(
         f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
         data={"chat_id": TELEGRAM_CHAT_ID, "text": msg}
     )
 
-print("DONE")
+    print("Telegram response:", response.status_code, response.text)
+    print("TOKEN:", bool(TELEGRAM_TOKEN))
+    print("CHAT_ID:", bool(TELEGRAM_CHAT_ID))
+    print("CSV SAYISI:", len(files))
+
 
