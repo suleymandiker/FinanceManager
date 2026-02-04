@@ -1,0 +1,33 @@
+name: Finance Daily Job
+
+on:
+  schedule:
+    - cron: "0 20 * * *"   # Her gün 20:00 UTC
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          pip install yfinance pandas
+
+      - name: Run finance script
+        run: |
+          python main.py
+
+      - name: Upload CSV output
+        uses: actions/upload-artifact@v4
+        with:
+          name: finance-data
+          path: output/*.csv
