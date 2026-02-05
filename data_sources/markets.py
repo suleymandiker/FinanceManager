@@ -44,6 +44,7 @@ SYMBOL_GROUPS = {
         "COPPER": "HG=F",
     },
     "FX": {
+        "DXY": "DX-Y.NYB",
         "EURUSD": "EURUSD=X",
         "USDJPY": "JPY=X",
         "GBPUSD": "GBPUSD=X",
